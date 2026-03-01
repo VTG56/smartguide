@@ -16,6 +16,9 @@ export default function App() {
         <Route path="/topics" element={<Topics />} />
         <Route path="/solver" element={<QuestionSolver />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/troubleshooting" element={<NotImplemented />} />
+        <Route path="/reports" element={<NotImplemented />} />
+        <Route path="/settings" element={<NotImplemented />} />
         <Route path="/not-implemented" element={<NotImplemented />} />
         <Route path="*" element={<NotImplemented />} />
       </Route>
