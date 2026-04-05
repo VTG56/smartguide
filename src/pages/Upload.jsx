@@ -1,11 +1,67 @@
+import { useState } from 'react';
+
 const supportedFormats = [
-  { ext: 'PDF', icon: '📄', status: 'pending' },
+  { ext: 'PDF', icon: '📄', status: 'active' },
   { ext: 'DOCX', icon: '📝', status: 'pending' },
   { ext: 'PPT', icon: '📊', status: 'pending' },
   { ext: 'TXT', icon: '📃', status: 'pending' },
 ];
 
 export default function Upload() {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [response, setResponse] = useState(null);
+  const [error, setError] = useState(null);
+
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    
+    if (!file) return;
+    
+    // Check if file is PDF
+    if (file.type !== 'application/pdf') {
+      setError('Please select a PDF file only');
+      setSelectedFile(null);
+      return;
+    }
+    
+    setSelectedFile(file);
+    setError(null);
+    setResponse(null);
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      setError('Please select a PDF file first');
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      const res = await fetch('http://localhost:8000/upload-lab-manual', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error(`Upload failed: ${res.status} ${res.statusText}`);
+      }
+
+      const data = await res.json();
+      setResponse(data);
+      
+    } catch (err) {
+      setError(err.message || 'Failed to upload file. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen py-10 lg:py-16">
       <div className="max-w-4xl mx-auto px-6 lg:px-10">
@@ -32,29 +88,97 @@ export default function Upload() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
                 </div>
-                <h3 className="font-bold text-slate-700 mb-2">Drop lab manual here or click to browse</h3>
+                <h3 className="font-bold text-slate-700 mb-2">Select a PDF file to upload</h3>
                 <p className="text-sm text-slate-400 mb-6">
-                  Supports PDF, DOCX, PPT, and TXT files up to 50MB
+                  Only PDF files are currently supported
                 </p>
-                <button disabled className="btn-editorial btn-solid opacity-50 cursor-not-allowed">
+                
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  id="file-input"
+                />
+                
+                <label htmlFor="file-input" className="btn-editorial btn-solid inline-flex items-center gap-2 cursor-pointer">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
                   </svg>
-                  Select Files
-                </button>
+                  Select PDF File
+                </label>
+
+                {selectedFile && (
+                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md inline-block">
+                    <p className="text-sm text-green-700 font-medium">
+                      📄 {selectedFile.name}
+                    </p>
+                    <p className="text-xs text-green-600">
+                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Upload Queue */}
-            <div className="card-editorial p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-slate-800">Upload Queue</h3>
-                <span className="text-sm text-slate-400">0 files</span>
+            {/* Upload Button */}
+            {selectedFile && (
+              <div className="text-center">
+                <button
+                  onClick={handleUpload}
+                  disabled={uploading}
+                  className={`btn-editorial btn-solid px-8 py-3 text-base ${
+                    uploading ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  {uploading ? 'Uploading...' : 'Upload to Backend'}
+                </button>
               </div>
-              <div className="py-8 text-center">
-                <p className="text-sm text-slate-400">No lab manuals uploaded yet</p>
+            )}
+
+            {/* Error Message */}
+            {error && (
+              <div className="card-editorial p-6 bg-red-50 border-red-200">
+                <div className="flex items-start gap-3">
+                  <span className="text-xl">⚠️</span>
+                  <div>
+                    <h4 className="font-semibold text-red-800 text-sm mb-1">Upload Error</h4>
+                    <p className="text-sm text-red-600">{error}</p>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Success Response */}
+            {response && response.status === 'success' && (
+              <div className="card-editorial p-6 bg-green-50 border-green-200">
+                <div className="flex items-start gap-3 mb-4">
+                  <span className="text-xl">✅</span>
+                  <div>
+                    <h4 className="font-semibold text-green-800 text-sm mb-1">Upload Successful!</h4>
+                    <p className="text-sm text-green-600">Your PDF has been processed by the backend.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="bg-white p-4 rounded-md border border-green-100">
+                    <p className="text-xs text-slate-500 mb-1">Total Pages</p>
+                    <p className="text-2xl font-bold text-slate-800">{response.pages}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-md border border-green-100">
+                    <p className="text-xs text-slate-500 mb-1">Total Characters</p>
+                    <p className="text-2xl font-bold text-slate-800">{response.total_characters.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-md border border-green-100">
+                  <p className="text-xs text-slate-500 mb-2 font-semibold">Text Preview:</p>
+                  <div className="bg-slate-50 p-3 rounded text-xs text-slate-700 max-h-64 overflow-y-auto font-mono leading-relaxed whitespace-pre-wrap">
+                    {response.text_preview}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Sidebar Info */}
@@ -69,7 +193,11 @@ export default function Upload() {
                       <span className="text-lg">{format.icon}</span>
                       <span className="font-medium text-slate-700">{format.ext}</span>
                     </div>
-                    <span className="tag bg-amber-50 text-amber-600 text-[10px]">Soon</span>
+                    {format.status === 'active' ? (
+                      <span className="tag bg-green-50 text-green-600 text-[10px]">Active</span>
+                    ) : (
+                      <span className="tag bg-amber-50 text-amber-600 text-[10px]">Soon</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -80,10 +208,9 @@ export default function Upload() {
               <div className="flex items-start gap-3">
                 <span className="text-xl">🧪</span>
                 <div>
-                  <h4 className="font-semibold text-blue-800 text-sm mb-1">RAG Integration Pending</h4>
+                  <h4 className="font-semibold text-blue-800 text-sm mb-1">Backend Connected</h4>
                   <p className="text-xs text-blue-600 leading-relaxed">
-                    Once uploaded, your lab manual will be parsed into experiments, procedures, 
-                    and viva Q&A for conversational retrieval.
+                    Your PDF will be sent to the FastAPI backend at localhost:8000 for processing.
                   </p>
                 </div>
               </div>
