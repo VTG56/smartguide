@@ -53,6 +53,24 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 Server will be available at: `http://localhost:8000`
 
+## Chunking Configuration
+
+Chunking is globally configurable through environment variables.
+
+- `CHUNK_SIZE` (default: `500`)
+- `CHUNK_OVERLAP_WORDS` (default: `100`)
+
+Behavior notes:
+
+- Chunks are generated with overlap to preserve context across boundaries.
+- If env values are invalid (non-integer, negative, overlap >= chunk size), backend auto-falls back to safe values.
+
+Example:
+
+```bash
+CHUNK_SIZE=500 CHUNK_OVERLAP_WORDS=100 uvicorn app.main:app --reload
+```
+
 ## Testing the Endpoint
 
 ### Option 1: Using FastAPI Interactive Docs
@@ -151,6 +169,8 @@ Upload a PDF file and extract text content.
 ✅ Temporary file cleanup
 ✅ Error handling
 ✅ Interactive API documentation
+✅ Overlapping chunk generation for boundary context preservation
+✅ Chunk boundary metadata (`chunk_index`, `start_word`, `end_word`, `prev_chunk_id`, `next_chunk_id`)
 
 ## Next Steps (Future)
 

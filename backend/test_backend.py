@@ -7,7 +7,66 @@ import json
 import sys
 from pathlib import Path
 
+from app.main import create_chunks
+
 BASE_URL = "http://localhost:8000"
+
+
+def _generate_word_text(total_words=1300):
+    """Generate deterministic text for chunk overlap tests."""
+    return " ".join(f"w{i}" for i in range(total_words))
+
+
+def test_chunk_overlap_logic():
+    """Validate overlapping chunk behavior and boundary metadata."""
+    print("\n" + "=" * 60)
+    print("TEST 0: Chunk Overlap Logic (Unit)")
+    print("=" * 60)
+
+    text = _generate_word_text(1300)
+    chunks = create_chunks(text, chunk_size=500, overlap_words=100)
+
+    if len(chunks) < 2:
+        print("✗ Expected multiple chunks for overlap validation")
+        return False
+
+    for idx, chunk in enumerate(chunks):
+        if chunk.get("chunk_index") != idx:
+            print(f"✗ chunk_index mismatch at position {idx}")
+            return False
+
+    for idx in range(1, len(chunks)):
+        prev_chunk_words = chunks[idx - 1]["text"].split()
+        curr_chunk_words = chunks[idx]["text"].split()
+        if prev_chunk_words[-100:] != curr_chunk_words[:100]:
+            print(f"✗ Overlap mismatch between chunk {idx - 1} and {idx}")
+            return False
+
+        if chunks[idx]["start_word"] != chunks[idx - 1]["end_word"] - 100:
+            print(f"✗ start_word/end_word continuity mismatch at chunk {idx}")
+            return False
+
+    if chunks[0].get("prev_chunk_id") is not None:
+        print("✗ First chunk prev_chunk_id should be None")
+        return False
+
+    if chunks[-1].get("next_chunk_id") is not None:
+        print("✗ Last chunk next_chunk_id should be None")
+        return False
+
+    # Invalid overlap should auto-fallback to a safe value.
+    fallback_chunks = create_chunks(text, chunk_size=100, overlap_words=200)
+    if len(fallback_chunks) < 2:
+        print("✗ Fallback overlap behavior did not create expected multiple chunks")
+        return False
+
+    fallback_step = fallback_chunks[1]["start_word"] - fallback_chunks[0]["start_word"]
+    if fallback_step <= 0 or fallback_step >= 100:
+        print("✗ Invalid fallback stride detected")
+        return False
+
+    print("✓ Overlap logic and metadata validation passed")
+    return True
 
 def test_health_check():
     """Test the health check endpoint"""
@@ -83,6 +142,37 @@ def test_pdf_upload(pdf_path):
         print(f"  Preview: {result.get('text_preview')[:200]}...")
         
         if response.status_code == 200 and result.get('status') == 'success':
+            chunks_response = requests.get(f"{BASE_URL}/chunks")
+            chunks_payload = chunks_response.json()
+            chunks = chunks_payload.get("chunks", [])
+
+            if chunks_response.status_code != 200 or not chunks:
+                print("\n✗ Failed to retrieve generated chunks from /chunks")
+                return False
+
+            required_fields = {
+                "id",
+                "text",
+                "length",
+                "chunk_index",
+                "start_word",
+                "end_word",
+                "prev_chunk_id",
+                "next_chunk_id",
+            }
+            missing = required_fields.difference(chunks[0].keys())
+            if missing:
+                print(f"\n✗ Missing chunk metadata fields: {sorted(missing)}")
+                return False
+
+            if len(chunks) >= 2:
+                first_words = chunks[0]["text"].split()
+                second_words = chunks[1]["text"].split()
+                overlap_len = min(100, len(first_words), len(second_words))
+                if first_words[-overlap_len:] != second_words[:overlap_len]:
+                    print("\n✗ Endpoint-generated chunks do not preserve boundary overlap")
+                    return False
+
             print("\n✓ PDF uploaded and processed successfully")
             return True
         else:
@@ -101,6 +191,9 @@ def main():
     print("╚" + "="*58 + "╝")
     
     results = []
+
+    # Test 0: Chunk overlap unit checks
+    results.append(("Chunk Overlap Logic", test_chunk_overlap_logic()))
     
     # Test 1: Health check
     results.append(("Health Check", test_health_check()))

@@ -35,11 +35,14 @@ The system follows a Retrieval-Augmented Generation (RAG) architecture, where:
 
 ### 3. Text Chunking System (Core Milestone)
 - Implemented chunking of extracted text into ~500-word segments
+- Added overlapping chunks (default: 100-word overlap) to preserve context across boundaries
 - Ensures chunks do not break mid-word
-- Each chunk contains:
+- Added boundary metadata per chunk:
   - Unique ID (UUID)
   - Text content
   - Character length
+  - `chunk_index`, `start_word`, `end_word`
+  - `prev_chunk_id`, `next_chunk_id`
 
 **Observed Chunk Size:**
 - ~2700–3600 characters per chunk
@@ -85,16 +88,13 @@ The system follows a Retrieval-Augmented Generation (RAG) architecture, where:
 1. **No Persistent Storage**
    - Data is lost when server restarts
 
-2. **No Overlapping Chunks**
-   - Context may break between chunks
-
-3. **No Semantic Understanding**
+2. **No Semantic Understanding**
    - Chunks are plain text (no embeddings yet)
 
-4. **No Retrieval System**
+3. **No Retrieval System**
    - Cannot search or rank relevant chunks
 
-5. **No Conversational Interface**
+4. **No Conversational Interface**
    - No chat endpoint implemented
 
 ---
@@ -102,8 +102,8 @@ The system follows a Retrieval-Augmented Generation (RAG) architecture, where:
 ## 🚧 Pending Work (Next Phases)
 
 ### 🔵 Phase 2: Improved Chunking
-- Add overlapping chunks (e.g., 100-word overlap)
-- Preserve context across boundaries
+- ✅ Completed: Added overlapping chunks (default 100-word overlap)
+- ✅ Completed: Preserved context across boundaries with overlap + boundary metadata
 
 ---
 
