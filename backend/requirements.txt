@@ -3,3 +3,6 @@ uvicorn
 pypdf2
 python-multipart
 requests
+google-genai
+chromadb
+python-dotenv

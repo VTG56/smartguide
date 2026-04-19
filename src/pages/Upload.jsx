@@ -54,6 +54,9 @@ export default function Upload() {
 
       const data = await res.json();
       setResponse(data);
+
+      // Signal to ChatPage that a manual has been uploaded
+      localStorage.setItem('smartguide_uploaded', 'true');
       
     } catch (err) {
       setError(err.message || 'Failed to upload file. Please try again.');

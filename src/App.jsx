@@ -6,6 +6,7 @@ import Topics from './pages/Topics';
 import QuestionSolver from './pages/QuestionSolver';
 import Analytics from './pages/Analytics';
 import NotImplemented from './pages/NotImplemented';
+import ChatPage from './pages/ChatPage';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/upload" element={<Upload />} />
         <Route path="/topics" element={<Topics />} />
         <Route path="/solver" element={<QuestionSolver />} />
+        <Route path="/chat" element={<ChatPage />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/troubleshooting" element={<NotImplemented />} />
         <Route path="/reports" element={<NotImplemented />} />
