@@ -1,127 +1,96 @@
-# Lab Manual Conversational Assistant - Backend
+# SmartGuide Backend
 
-## Overview
+FastAPI backend for the SmartGuide lab manual assistant. It accepts PDF lab manuals, extracts and cleans text, creates overlapping chunks, embeds the chunks with Gemini, stores them in ChromaDB, and serves a RAG chat endpoint.
 
-FastAPI backend for uploading laboratory manual PDFs and extracting text content.
+## Current Status
+
+The backend has completed the main prototype RAG path:
+
+- Upload PDF.
+- Extract text.
+- Clean text.
+- Create overlapping chunks.
+- Generate Gemini embeddings.
+- Store vectors in persistent ChromaDB.
+- Retrieve similar chunks for a user query.
+- Generate answers with Gemini using retrieved manual context.
+
+It still needs stronger document management, automated tests, page-aware citations, and production hardening.
 
 ## Project Structure
 
-```
+```text
 backend/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                 # FastAPI app & endpoints
+│   ├── main.py
 │   ├── routes/
-│   │   └── __init__.py
+│   │   ├── __init__.py
+│   │   └── upload.py
 │   ├── services/
 │   │   ├── __init__.py
-│   │   └── pdf_processor.py    # PDF extraction logic
+│   │   ├── embedding_service.py
+│   │   ├── pdf_processor.py
+│   │   └── vector_store.py
 │   └── utils/
 │       ├── __init__.py
-│       └── text_cleaner.py     # Text cleaning utilities
-├── requirements.txt            # Python dependencies
-└── README.md                   # This file
+│       └── text_cleaner.py
+├── requirements.txt
+├── README.md
+└── TESTING.md
 ```
 
-## Installation
-
-### 1. Navigate to backend directory
+## Setup
 
 ```bash
 cd backend
-```
-
-### 2. Install dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-## Running the Server
+Create a `.env` file in `backend/`:
 
-### Start the development server with auto-reload:
+```env
+GEMINI_API_KEY=your_api_key_here
+```
+
+Optional chunking settings:
+
+```env
+CHUNK_SIZE=500
+CHUNK_OVERLAP_WORDS=100
+```
+
+## Running
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-### Or specify custom host/port:
+Custom host and port:
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Server will be available at: `http://localhost:8000`
+Server:
 
-## Chunking Configuration
-
-Chunking is globally configurable through environment variables.
-
-- `CHUNK_SIZE` (default: `500`)
-- `CHUNK_OVERLAP_WORDS` (default: `100`)
-
-Behavior notes:
-
-- Chunks are generated with overlap to preserve context across boundaries.
-- If env values are invalid (non-integer, negative, overlap >= chunk size), backend auto-falls back to safe values.
-
-Example:
-
-```bash
-CHUNK_SIZE=500 CHUNK_OVERLAP_WORDS=100 uvicorn app.main:app --reload
+```text
+http://localhost:8000
 ```
 
-## Testing the Endpoint
+Interactive docs:
 
-### Option 1: Using FastAPI Interactive Docs
-
-1. Visit `http://localhost:8000/docs`
-2. Scroll to the `POST /upload-lab-manual` endpoint
-3. Click "Try it out"
-4. Click "Choose File" and upload a PDF
-5. Click "Execute"
-
-### Option 2: Using Python requests
-
-```python
-import requests
-
-files = {'file': open('path/to/your/lab_manual.pdf', 'rb')}
-response = requests.post('http://localhost:8000/upload-lab-manual', files=files)
-print(response.json())
-```
-
-### Option 3: Using curl
-
-```bash
-curl -X POST "http://localhost:8000/upload-lab-manual" \
-  -H "accept: application/json" \
-  -F "file=@/path/to/lab_manual.pdf"
-```
-
-### Option 4: Using VS Code REST Client
-
-Create a file `test.http`:
-
-```http
-POST http://localhost:8000/upload-lab-manual
-Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
-
-------WebKitFormBoundary
-Content-Disposition: form-data; name="file"; filename="lab_manual.pdf"
-Content-Type: application/pdf
-
-< /path/to/lab_manual.pdf
-------WebKitFormBoundary--
+```text
+http://localhost:8000/docs
 ```
 
 ## API Endpoints
 
-### GET `/` (Health Check)
+### `GET /`
 
-Returns server status.
+Health check.
 
-**Response:**
+Example response:
 
 ```json
 {
@@ -129,52 +98,181 @@ Returns server status.
 }
 ```
 
-### POST `/upload-lab-manual`
+### `POST /upload-lab-manual`
 
-Upload a PDF file and extract text content.
+Uploads a PDF manual and processes it.
 
-**Parameters:**
+Processing steps:
 
-- `file` (required): PDF file
+1. Validate the file extension is `.pdf`.
+2. Save the upload temporarily.
+3. Extract text with PyPDF2.
+4. Clean extracted text.
+5. Create overlapping chunks.
+6. Store chunks in memory.
+7. Generate embeddings with Gemini.
+8. Upsert vectors into ChromaDB.
+9. Delete the temporary uploaded file.
 
-**Response:**
+Example response:
 
 ```json
 {
   "status": "success",
   "pages": 25,
   "text_preview": "Experiment 1: Verification of Ohm's Law...",
-  "total_characters": 45328
+  "total_characters": 45328,
+  "chunks_created": 18,
+  "embeddings_status": "success",
+  "vectors_stored": 18
 }
 ```
 
-**Error Responses:**
+Known limitation: new uploads replace the in-memory chunk list but do not automatically clear old ChromaDB vectors. Use `DELETE /reset` before uploading a replacement manual until multi-document indexing is implemented.
 
-- `400 Bad Request`: File is not a PDF
-- `500 Internal Server Error`: PDF processing failed
+### `GET /chunks`
+
+Returns the chunks currently held in memory.
+
+Example response shape:
+
+```json
+{
+  "status": "success",
+  "total_chunks": 18,
+  "chunks": []
+}
+```
+
+### `POST /chat`
+
+Runs the conversational RAG flow.
+
+Request body:
+
+```json
+{
+  "query": "What apparatus is needed for Ohm's law?",
+  "history": [
+    {
+      "role": "user",
+      "content": "What experiments are in this manual?"
+    },
+    {
+      "role": "assistant",
+      "content": "The manual includes..."
+    }
+  ]
+}
+```
+
+Processing steps:
+
+1. Check that the ChromaDB collection has indexed chunks.
+2. Embed the user query with Gemini.
+3. Retrieve the top 5 similar chunks from ChromaDB.
+4. Build a context-only system instruction.
+5. Send the prompt and conversation history to Gemini.
+6. Return the answer and source chunk previews.
+
+Example response:
+
+```json
+{
+  "answer": "The apparatus required includes...",
+  "sources": [
+    {
+      "chunk_index": 3,
+      "text_preview": "Apparatus required: resistor, ammeter, voltmeter..."
+    }
+  ]
+}
+```
+
+### `DELETE /reset`
+
+Clears the ChromaDB collection and the in-memory chunks.
+
+Example response:
+
+```json
+{
+  "status": "success",
+  "message": "All data has been cleared successfully."
+}
+```
+
+## Completed
+
+- FastAPI app initialization.
+- CORS setup for frontend access.
+- PDF upload validation.
+- PDF text extraction.
+- Text cleaning utility.
+- Configurable chunk size and overlap.
+- Chunk metadata for boundaries and neighbor links.
+- Temporary upload cleanup.
+- In-memory chunk inspection endpoint.
+- Gemini embedding service.
+- Gemini query embedding service.
+- ChromaDB persistent collection.
+- Similarity search.
+- Gemini-powered chat generation.
+- Source previews in chat responses.
+- Data reset endpoint.
+- Swagger/OpenAPI docs through FastAPI.
+
+## Remaining
+
+- Add automated test suite.
+- Clear or version ChromaDB data correctly on new uploads.
+- Add multi-document support.
+- Store document metadata such as filename, upload time, subject, and page ranges.
+- Track page numbers for citations.
+- Improve startup checks for missing `GEMINI_API_KEY`.
+- Add request size limits and safer upload handling.
+- Add structured logging.
+- Add authentication and per-user document isolation.
+- Add rate limiting.
+- Add deployment configuration.
+- Add support for DOCX, PPT, and TXT if those formats remain in scope.
 
 ## Dependencies
 
-- **fastapi**: Web framework
-- **uvicorn**: ASGI server
-- **pypdf2**: PDF text extraction
-- **python-multipart**: Form data handling
+- `fastapi`
+- `uvicorn`
+- `pypdf2`
+- `python-multipart`
+- `requests`
+- `google-genai`
+- `chromadb`
+- `python-dotenv`
 
-## Features
+## Quick Test
 
-✅ PDF file upload validation
-✅ Text extraction from PDFs
-✅ Intelligent text cleaning
-✅ CORS enabled for frontend integration
-✅ Temporary file cleanup
-✅ Error handling
-✅ Interactive API documentation
-✅ Overlapping chunk generation for boundary context preservation
-✅ Chunk boundary metadata (`chunk_index`, `start_word`, `end_word`, `prev_chunk_id`, `next_chunk_id`)
+Health check:
 
-## Next Steps (Future)
+```bash
+curl http://localhost:8000/
+```
 
-- Add LangChain for text processing
-- Implement FAISS vector database
-- Add conversation endpoints
-- Add authentication
+Upload PDF:
+
+```bash
+curl -X POST "http://localhost:8000/upload-lab-manual" \
+  -F "file=@/path/to/lab_manual.pdf"
+```
+
+Chat:
+
+```bash
+curl -X POST "http://localhost:8000/chat" \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":\"What experiments are covered?\",\"history\":[]}"
+```
+
+Reset:
+
+```bash
+curl -X DELETE "http://localhost:8000/reset"
+```
