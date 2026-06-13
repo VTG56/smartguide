@@ -1,137 +1,94 @@
-# Lab Manual Backend - Testing Guide
+# SmartGuide Backend Testing
 
-## Server Status
+This backend testing guide covers the FastAPI service. For the full project checklist, see the root [TESTING.md](../TESTING.md).
 
-✅ **Server is running at: http://localhost:8000**
+## Prerequisites
 
-## Testing Methods
+- Python is installed.
+- A virtual environment exists in `backend/venv`.
+- Dependencies are installed with `pip install -r requirements.txt`.
+- `backend/.env` contains:
 
-### 1. Interactive API Documentation (Easiest)
-
-Visit: **http://localhost:8000/docs**
-
-- Scroll to `POST /upload-lab-manual`
-- Click "Try it out"
-- Click "Choose File" and select a PDF
-- Click "Execute"
-- See results instantly
-
-### 2. Alternative Interactive Docs
-
-Visit: **http://localhost:8000/redoc** (Alternative UI)
-
-### 3. Python Test Script
-
-Create `test_backend.py` in the backend folder:
-
-```python
-import requests
-import os
-
-# Test health check
-print("Testing health check endpoint...")
-response = requests.get("http://localhost:8000/")
-print(f"✓ Response: {response.json()}\n")
-
-# Test PDF upload
-pdf_path = "sample.pdf"  # Replace with your PDF
-
-if os.path.exists(pdf_path):
-    print(f"Testing PDF upload with {pdf_path}...")
-    with open(pdf_path, "rb") as f:
-        files = {"file": f}
-        response = requests.post("http://localhost:8000/upload-lab-manual", files=files)
-
-    result = response.json()
-    print(f"✓ Status: {result['status']}")
-    print(f"✓ Pages: {result['pages']}")
-    print(f"✓ Characters: {result['total_characters']}")
-    print(f"✓ Preview: {result['text_preview'][:100]}...\n")
-else:
-    print(f"⚠ {pdf_path} not found. Place a PDF in the backend folder to test.")
+```env
+GEMINI_API_KEY=your_key_here
+CHUNK_SIZE=500
+CHUNK_OVERLAP_WORDS=100
 ```
 
-Run it:
+## Start Backend
 
 ```bash
-python test_backend.py
+cd backend
 ```
 
-### 4. PowerShell Test (Windows)
+Windows:
 
 ```powershell
-# Test health check
-$response = Invoke-WebRequest -Uri 'http://localhost:8000/' -UseBasicParsing
-$response.Content | ConvertFrom-Json
-
-# Test PDF upload (replace with your PDF path)
-$pdfPath = "C:\path\to\sample.pdf"
-$response = Invoke-WebRequest -Uri 'http://localhost:8000/upload-lab-manual' `
-    -Method Post `
-    -Form @{file=Get-Item $pdfPath} `
-    -UseBasicParsing
-$response.Content | ConvertFrom-Json
+.\venv\Scripts\activate
+uvicorn app.main:app --reload
 ```
 
-### 5. cURL Test (Linux/Mac/Windows with Git Bash)
+Unix/macOS:
 
 ```bash
-# Health check
-curl http://localhost:8000/
-
-# Upload PDF
-curl -X POST "http://localhost:8000/upload-lab-manual" \
-  -F "file=@/path/to/sample.pdf"
+source venv/bin/activate
+uvicorn app.main:app --reload
 ```
 
-### 6. VS Code REST Client
+Expected URLs:
 
-Install the REST Client extension, then create `test.http`:
+- Backend: `http://localhost:8000`
+- API docs: `http://localhost:8000/docs`
 
-```http
-### Health Check
-GET http://localhost:8000/
+## Manual Backend Tests
 
-### Upload PDF
-POST http://localhost:8000/upload-lab-manual
-Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
+### A. Health Check
 
-------WebKitFormBoundary
-Content-Disposition: form-data; name="file"; filename="sample.pdf"
-Content-Type: application/pdf
+Open:
 
-< ./sample.pdf
-------WebKitFormBoundary--
+```text
+http://localhost:8000
 ```
 
-Click "Send Request" on each endpoint.
-
-## Example Response
+Expected response:
 
 ```json
 {
-  "status": "success",
-  "pages": 25,
-  "text_preview": "Experiment 1: Verification of Ohm's Law...",
-  "total_characters": 45328
+  "status": "Lab Manual Conversational Assistant API is running"
 }
 ```
 
-## Error Testing
+### B. Fail-Fast API Key Check
 
-### Test invalid file type
+1. Temporarily rename `backend/.env`.
+2. Restart the backend in a fresh terminal.
+3. Expected: backend startup fails with a missing `GEMINI_API_KEY` error.
+4. Restore `backend/.env`.
 
-```python
-with open("test.txt", "w") as f:
-    f.write("This is not a PDF")
+### C. Upload PDF
 
-files = {"file": open("test.txt", "rb")}
-response = requests.post("http://localhost:8000/upload-lab-manual", files=files)
-print(response.status_code)  # Should be 400
-print(response.json())  # {"detail": "Only PDF files are allowed."}
+Use Swagger at `http://localhost:8000/docs` or curl:
+
+```bash
+curl -X POST "http://localhost:8000/upload-lab-manual" \
+  -F "file=@/path/to/lab_manual.pdf"
 ```
 
-### Expected response:
+Expected fields:
+
+- `status: "success"`
+- `pages`
+- `total_characters`
+- `chunks_created`
+- `embeddings_status`
+- `vectors_stored`
+- `text_preview`
+
+### D. Reject Non-PDF
+
+Try uploading a `.txt` file to `/upload-lab-manual`.
+
+Expected:
 
 ```json
 {
@@ -139,62 +96,69 @@ print(response.json())  # {"detail": "Only PDF files are allowed."}
 }
 ```
 
-## Troubleshooting
+The current validation checks the filename extension. A file renamed to `.pdf` but containing invalid PDF data may fail later during PDF processing with a processing error.
 
-### Server won't start
+### E. Inspect Chunks
 
-```bash
-# Kill existing processes on port 8000
-# Windows
-netstat -ano | findstr :8000
-taskkill /PID <PID> /F
-
-# Then restart
-uvicorn app.main:app --reload
-```
-
-### PDF extraction fails
-
-- Ensure PDF is valid and not corrupted
-- Check PyPDF2 is installed: `pip list | grep -i pypdf`
-
-### CORS issues
-
-- Backend already has CORS enabled for all origins
-- Should work from any frontend
-
-## File Upload Size Limits
-
-- FastAPI default: 25 MB
-- To modify, edit `app/main.py` and add max_upload_size
-
-## API Endpoints Summary
-
-| Method | Endpoint             | Purpose                     |
-| ------ | -------------------- | --------------------------- |
-| GET    | `/`                  | Health check                |
-| POST   | `/upload-lab-manual` | Upload PDF and extract text |
-
-## Next: Creating Test PDFs
-
-If you don't have a test PDF, create one with Python:
-
-```python
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
-
-# Create a simple PDF
-pdf_path = "test_lab_manual.pdf"
-c = canvas.Canvas(pdf_path, pagesize=letter)
-c.drawString(100, 750, "Experiment 1: Verification of Ohm's Law")
-c.drawString(100, 730, "Objective: To verify Ohm's Law")
-c.drawString(100, 710, "Materials: Resistor, Voltmeter, Ammeter")
-c.save()
-print(f"Test PDF created: {pdf_path}")
-```
-
-Then test with:
+Call:
 
 ```bash
-python test_backend.py
+curl http://localhost:8000/chunks
 ```
+
+Expected:
+
+- `total_chunks > 0` after upload.
+- chunks include `id`, `chunk_index`, `start_word`, `end_word`, `prev_chunk_id`, and `next_chunk_id`.
+
+### F. Chat With Manual
+
+```bash
+curl -X POST "http://localhost:8000/chat" \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":\"What experiments are covered?\",\"history\":[]}"
+```
+
+Expected:
+
+- `answer`
+- `sources`
+
+### G. Chat Guard With No Manual
+
+1. Call `DELETE /reset`.
+2. Call `POST /chat`.
+
+Expected: response asks the user to upload a manual first and returns an empty `sources` array.
+
+### H. Reset
+
+```bash
+curl -X DELETE "http://localhost:8000/reset"
+```
+
+Expected:
+
+- success message
+- `GET /chunks` returns `total_chunks: 0`
+- `/chat` no-manual guard triggers
+
+### I. Auto-Wipe Old Vectors
+
+1. Upload PDF #1.
+2. Ask a question specific to PDF #1.
+3. Upload PDF #2.
+4. Ask the same PDF #1 question.
+5. Expected: answer should not use old PDF #1 content.
+6. Ask a PDF #2-specific question.
+7. Expected: answer should use PDF #2 content.
+
+## Endpoints Summary
+
+| Method | Endpoint | Expected Status |
+| --- | --- | --- |
+| `GET` | `/` | available |
+| `POST` | `/upload-lab-manual` | available |
+| `GET` | `/chunks` | available |
+| `POST` | `/chat` | available |
+| `DELETE` | `/reset` | available |

@@ -283,7 +283,7 @@ export default function ChatPage() {
                 <div>
                   <div className={`chat-bubble ${msg.role}`}>
                     {msg.role === 'assistant' ? (
-                      <div className="prose prose-sm max-w-none prose-p:my-1 prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-headings:my-2 prose-code:bg-gray-100 prose-code:px-1 prose-code:rounded dark:prose-invert">
+                      <div className="prose prose-sm prose-slate max-w-none prose-p:my-1 prose-p:text-slate-700 prose-li:my-0.5 prose-li:text-slate-700 prose-ul:my-1 prose-ol:my-1 prose-headings:my-2 prose-headings:text-slate-800 prose-strong:text-slate-800 prose-code:bg-gray-100 prose-code:px-1 prose-code:rounded">
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
                       </div>
                     ) : (

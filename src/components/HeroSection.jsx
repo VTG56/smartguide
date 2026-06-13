@@ -23,7 +23,7 @@ export default function HeroSection() {
           <Link to="/upload" className="btn-primary text-base">
             Get Started
           </Link>
-          <Link to="/not-implemented" className="btn-secondary text-base">
+          <Link to="/chat" className="btn-secondary text-base">
             View Architecture
           </Link>
         </div>

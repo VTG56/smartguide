@@ -23,6 +23,14 @@ def _get_collection():
     )
 
 
+def _collection_exists() -> bool:
+    """Return whether the configured collection currently exists."""
+    return any(
+        getattr(collection, "name", collection) == COLLECTION_NAME
+        for collection in _client.list_collections()
+    )
+
+
 def upsert_chunks(chunks: list[dict]) -> int:
     """
     Upsert embedded chunks into ChromaDB.
@@ -106,9 +114,15 @@ def search_similar(query: str, top_k: int = 5) -> list[dict]:
 
 
 def clear_collection():
-    """Delete and recreate the collection (used by /reset endpoint)."""
-    _client.delete_collection(name=COLLECTION_NAME)
-    # Recreate so subsequent operations don't fail
+    """Delete and recreate the collection without failing when it is absent."""
+    if _collection_exists():
+        try:
+            _client.delete_collection(name=COLLECTION_NAME)
+        except Exception:
+            if _collection_exists():
+                raise
+
+    # Recreate so subsequent operations don't fail.
     _get_collection()
 
 

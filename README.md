@@ -1,14 +1,36 @@
 # SmartGuide
 
-SmartGuide is a lab manual assistant built with a React frontend and a FastAPI backend. It lets a user upload a lab manual PDF, extracts and chunks the manual text, stores semantic embeddings in ChromaDB, and answers questions using a Retrieval-Augmented Generation (RAG) flow with Gemini.
+SmartGuide is a lab manual assistant that lets users upload a PDF lab manual and ask questions using a Gemini-powered Retrieval-Augmented Generation (RAG) pipeline.
 
-...
 ## Current Status
 
-The project has advanced past the initial UI scaffold and features a fully connected RAG pipeline. PDF upload, text chunking, embedding generation, and vector storage are fully functional. The system automatically manages vector isolation (auto-wiping previous vectors on new uploads) and includes a fail-fast startup sequence. Some specialized frontend pages are currently undergoing integration with the live chat API.
+SmartGuide currently supports a local, single-manual RAG workflow. A user can upload one PDF manual, index it into ChromaDB, ask manual-grounded questions, and use focused frontend tools for viva preparation, troubleshooting, and experiment explanation. Uploading a replacement manual clears the previous in-memory chunks and ChromaDB vectors to reduce cross-manual hallucination.
+
+This is a local academic project prototype, not a production deployment.
+
+## Features
+
+- Upload a PDF lab manual.
+- Validate PDF selection in the frontend before upload.
+- Extract, clean, chunk, embed, and index manual text.
+- View upload processing stats:
+  - page count
+  - character count
+  - chunks created
+  - vectors stored
+  - embedding status
+  - text preview
+- Chat with the uploaded manual through the RAG backend.
+- Render assistant answers as Markdown.
+- Display source snippets from retrieved chunks.
+- Preserve chat history during a chat session.
+- Use quick prompt chips on the Chat page.
+- Generate viva-style questions from the uploaded manual.
+- Use the Solver page for manual-grounded troubleshooting guidance.
+- Use the Experiment Explainer page for prompt-card study shortcuts.
+- Reset indexed data with `DELETE /reset`.
 
 ## Tech Stack
-
 
 ### Frontend
 
@@ -16,123 +38,88 @@ The project has advanced past the initial UI scaffold and features a fully conne
 - Vite
 - Tailwind CSS
 - React Router
-- React Markdown for rendering assistant responses
+- React Markdown
 
 ### Backend
 
 - FastAPI
-- PyPDF2 for PDF text extraction
-- Google GenAI SDK for embeddings and chat generation
+- PyPDF2
+- Google GenAI SDK
 - ChromaDB persistent vector store
-- python-dotenv for local environment configuration
+- python-dotenv
 
+## Architecture Overview
 
-## Completed Features
+```text
+PDF Upload
+  -> Text Extraction
+  -> Text Cleanup
+  -> Chunking
+  -> Gemini Embeddings
+  -> ChromaDB Storage
+  -> Semantic Retrieval
+  -> Gemini Answer Generation
+  -> Frontend Markdown + Sources
+```
 
-### Frontend
-
-- Dashboard layout with sidebar navigation, accurately reflecting the live system state.
-- Upload page for selecting and uploading PDF lab manuals.
-- Frontend PDF validation before upload.
-- Upload success state showing extracted page count, character count, text preview, chunks created, and vectors stored.
-- Direct routing from successful upload to the Chat interface.
-- Chat page connected to the backend `/chat` API.
-- Chat history passed to the backend with each request.
-- Markdown rendering for assistant answers.
-- Loading indicator, error toast, clear-chat action, and quick prompt chips.
-- Source display for retrieved chunks returned by the backend.
-
-### Backend
-
-- FastAPI application with CORS enabled for frontend integration.
-- Fail-fast startup configuration that halts execution if `GEMINI_API_KEY` is missing.
-- Health check endpoint: `GET /`.
-- PDF upload endpoint: `POST /upload-lab-manual`.
-- Automatic clearing of ChromaDB and in-memory chunks upon new manual upload to prevent cross-document hallucinations.
-- Text extraction from uploaded PDFs.
-- Text cleanup for whitespace, broken hyphenated lines, and repeated newlines.
-- Configurable word chunking with overlap.
-- Chunk boundary metadata:
-  - `id`
-  - `chunk_index`
-  - `start_word`
-  - `end_word`
-  - `prev_chunk_id`
-  - `next_chunk_id`
-- In-memory chunk cache for inspection through `GET /chunks`.
-- Gemini embedding generation with `gemini-embedding-001`.
-- Persistent ChromaDB vector storage in `./chroma_db`.
-- Semantic search over uploaded chunks.
-- RAG chat endpoint: `POST /chat`.
-- Support for `system_override` parameters in the `/chat` endpoint to facilitate hidden prompts for specialized UI views.
-- Gemini chat response generation with `gemini-2.5-flash`.
-- Source previews returned with chat responses.
-- Reset endpoint: `DELETE /reset`, which manually clears ChromaDB and in-memory chunks.
-- Temporary uploaded PDF cleanup after processing.
-- Basic error handling for invalid files, failed processing, empty chat queries, and reset failures.
-
-## Remaining Work
-
-### Frontend Gaps
-
-- The dashboard still describes the app as an early UI scaffold even though the backend RAG flow now exists.
-- The `/solver` page is still a static demo and is not connected to the live chat endpoint.
-- The `/topics` page uses hard-coded experiment cards instead of extracting experiments from uploaded manuals.
-- Search and filter controls on the lab experiments page are visual only.
-- The viva preparation page uses static sample questions instead of generated questions from uploaded content.
-- Troubleshooting, reports, settings, and catch-all pages route to placeholder screens.
-- The upload page does not show `chunks_created`, `embeddings_status`, or `vectors_stored`, even though the backend returns them.
-- The frontend tracks upload state using `localStorage`, but it does not check the actual backend collection state.
-- Backend URL is hard-coded as `http://localhost:8000`; it should move to an environment variable.
-- There is no authentication, user profile, or per-user document separation.
-
-### Backend Gaps
-
-- ChromaDB persists vectors, but document metadata is minimal and does not store filename, upload time, page number, or subject.
-- Uploading a new PDF clears only in-memory chunks; old ChromaDB vectors are not cleared before upserting new chunks unless `/reset` is called separately.
-- PDF chunk metadata is word-based only; chunks are not mapped back to PDF pages.
-- The chat endpoint assumes `GEMINI_API_KEY` is configured, but startup does not fail fast or expose configuration health.
-- No automated tests are currently present for upload, chunking, embeddings, vector search, or chat behavior.
-- No request size limit or production upload storage strategy is configured.
-- No rate limiting, authentication, or abuse protection.
-- No structured logging or monitoring.
-- No deployment configuration for frontend, backend, or ChromaDB data persistence.
-- DOCX, PPT, and TXT are shown as future formats but are not implemented.
-
-### Product Gaps
-
-- No multi-manual support.
-- No document management page to list, rename, delete, or re-index uploaded manuals.
-- No experiment extraction pipeline.
-- No generated viva question bank.
-- No report-writing workflow.
-- No citations that include page numbers.
-- No feedback mechanism to mark answers as useful or incorrect.
-- No offline fallback when Gemini is unavailable.
+Specialized frontend pages such as Viva Prep, Solver, and Experiment Explainer reuse the same `/chat` endpoint with a `system_override`. They do not create separate backend endpoints and still use the same ChromaDB retrieval flow.
 
 ## Project Structure
 
 ```text
 smartguide/
-├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── services/
-│   │   │   ├── embedding_service.py
-│   │   │   ├── pdf_processor.py
-│   │   │   └── vector_store.py
-│   │   └── utils/
-│   │       └── text_cleaner.py
-│   ├── README.md
-│   ├── TESTING.md
-│   └── requirements.txt
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-├── package.json
-└── README.md
+|-- backend/
+|   |-- app/
+|   |   |-- main.py
+|   |   |-- services/
+|   |   |   |-- embedding_service.py
+|   |   |   |-- pdf_processor.py
+|   |   |   `-- vector_store.py
+|   |   `-- utils/
+|   |       `-- text_cleaner.py
+|   |-- README.md
+|   |-- TESTING.md
+|   `-- requirements.txt
+|-- src/
+|   |-- components/
+|   |-- pages/
+|   |   |-- Analytics.jsx
+|   |   |-- ChatPage.jsx
+|   |   |-- Home.jsx
+|   |   |-- QuestionSolver.jsx
+|   |   |-- Topics.jsx
+|   |   `-- Upload.jsx
+|   `-- services/
+|       `-- api.js
+|-- .env.example
+|-- package.json
+|-- README.md
+`-- TESTING.md
 ```
+
+## Environment Variables
+
+### Frontend
+
+Create an optional root `.env`:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+If this variable is not set, the frontend falls back to `http://localhost:8000`.
+
+### Backend
+
+Create `backend/.env`:
+
+```env
+GEMINI_API_KEY=your_key_here
+CHUNK_SIZE=500
+CHUNK_OVERLAP_WORDS=100
+```
+
+`GEMINI_API_KEY` is required. `CHUNK_SIZE` and `CHUNK_OVERLAP_WORDS` are optional and default to `500` and `100`.
 
 ## Setup
 
@@ -140,16 +127,28 @@ smartguide/
 
 ```bash
 cd backend
+python -m venv venv
+```
+
+Activate the virtual environment on Windows:
+
+```powershell
+.\venv\Scripts\activate
+```
+
+Activate the virtual environment on Unix/macOS:
+
+```bash
+source venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
 pip install -r requirements.txt
 ```
 
-Create `backend/.env`:
-
-```env
-GEMINI_API_KEY=your_api_key_here
-```
-
-Run the backend:
+Create `backend/.env` with `GEMINI_API_KEY`, then start the backend:
 
 ```bash
 uvicorn app.main:app --reload
@@ -188,34 +187,36 @@ http://localhost:5173
 2. Start the frontend on `localhost:5173`.
 3. Open the Upload Manual page.
 4. Upload a PDF lab manual.
-5. The backend extracts text, creates overlapping chunks, embeds them, and stores vectors in ChromaDB.
-6. Open Chat with AI.
-7. Ask questions about the uploaded manual.
-8. The backend retrieves relevant chunks and generates an answer with source previews.
+5. Review upload stats and embedding status.
+6. Open Chat with AI and ask questions about the manual.
+7. Use Viva Prep to generate viva-style questions from the manual.
+8. Use Error Solver for manual-grounded troubleshooting guidance.
+9. Use Experiment Explainer prompt cards for study shortcuts.
+10. Uploading a new manual replaces the currently indexed manual.
 
 ## API Summary
 
-| Method | Endpoint | Status | Purpose |
-| --- | --- | --- | --- |
-| `GET` | `/` | Complete | Health check |
-| `POST` | `/upload-lab-manual` | Complete | Upload and process a PDF |
-| `GET` | `/chunks` | Complete | Inspect current in-memory chunks |
-| `POST` | `/chat` | Complete | Ask questions using RAG |
-| `DELETE` | `/reset` | Complete | Clear ChromaDB and in-memory chunks |
-
-## Environment Variables
-
-| Variable | Default | Purpose |
+| Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | None | Required for embeddings and chat |
-| `CHUNK_SIZE` | `500` | Target words per chunk |
-| `CHUNK_OVERLAP_WORDS` | `100` | Overlap between adjacent chunks |
+| `GET` | `/` | Health check |
+| `POST` | `/upload-lab-manual` | Upload and process a PDF manual |
+| `GET` | `/chunks` | Inspect current in-memory chunks |
+| `POST` | `/chat` | Ask questions using RAG |
+| `DELETE` | `/reset` | Clear ChromaDB vectors and in-memory chunks |
 
-## Recommended Next Steps
+## Limitations and Future Scope
 
-1. Clear ChromaDB automatically before indexing a replacement manual, or add multi-document support.
-2. Update frontend pages so dashboard, solver, topics, and viva prep reflect the live RAG implementation.
-3. Display upload embedding status and vector count in the upload UI.
-4. Add automated backend tests for chunking, upload validation, reset, and chat guard behavior.
-5. Move frontend API base URL into environment configuration.
-6. Add page-aware citations by tracking PDF page metadata during chunking.
+- Single-manual mode only.
+- No authentication or per-user document isolation.
+- No page-number citations.
+- No multi-manual document management.
+- No automatic experiment extraction pipeline.
+- PDF-only upload; DOCX, PPT, and TXT are not implemented.
+- No offline fallback when Gemini is unavailable.
+- No production deployment configuration.
+- No rate limiting or abuse protection.
+- Basic error handling only.
+
+## Testing
+
+See [TESTING.md](TESTING.md) for the full manual testing checklist.

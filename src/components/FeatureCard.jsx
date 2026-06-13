@@ -10,7 +10,7 @@ export default function FeatureCard({ icon, title, description }) {
       <p className="text-sm text-slate-500 leading-relaxed">{description}</p>
 
       <span className="mt-auto inline-block text-xs font-semibold text-[var(--color-teal-600)] bg-[rgba(4,200,177,0.08)] px-3 py-1 rounded-full">
-        Coming in Phase 2
+        SmartGuide workflow
       </span>
     </div>
   );

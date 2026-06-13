@@ -1,161 +1,276 @@
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import { sendMessage } from '../services/api';
 
-const experiments = [
+const TOPIC_SYSTEM_OVERRIDE = `You are SmartGuide's experiment explainer assistant.
+Use ONLY the retrieved context from the uploaded lab manual.
+Do not invent experiments, readings, apparatus, formulas, observations, procedures, or precautions that are not present in the retrieved manual context.
+If the uploaded manual does not contain enough information for the selected topic, clearly say that the manual does not provide enough information.
+Format the response in Markdown.
+
+When explaining experiments, use this structure wherever possible:
+
+## Overview
+
+Briefly explain what the selected topic or experiment is about.
+
+## Aim
+
+Mention the aim if present in the manual.
+
+## Apparatus / Requirements
+
+List apparatus, components, software, tools, or materials if present.
+
+## Theory
+
+Explain the theory in simple language using only manual context.
+
+## Procedure
+
+Give step-by-step procedure if present.
+
+## Observations / Results
+
+Mention observations, tables, outputs, or expected results if present.
+
+## Precautions
+
+List precautions if present.
+
+## Quick Revision Points
+
+Add 3 to 5 short revision points based only on the manual.`;
+
+const topicCards = [
   {
-    title: "Ohm's Law Verification",
-    subject: 'Physics',
-    tags: ['circuit', 'measurements'],
-    description: 'Verify Ohm\'s law by plotting V-I characteristics and calculating resistance from the slope.',
-    size: 'large',
+    title: 'Explain Experiment 1',
+    description: 'Get the aim, theory, procedure, and key points for Experiment 1.',
+    query: 'Explain Experiment 1 from the uploaded manual. Include aim, theory, apparatus, procedure, observations, and precautions if available.',
   },
   {
-    title: 'Determination of Viscosity',
-    subject: 'Physics',
-    tags: ['fluid', 'measurements'],
-    description: 'Measure the coefficient of viscosity of a liquid using Stokes\' method with falling sphere.',
-    size: 'small',
+    title: 'Explain Experiment 2',
+    description: 'Get a structured explanation of Experiment 2.',
+    query: 'Explain Experiment 2 from the uploaded manual. Include aim, theory, apparatus, procedure, observations, and precautions if available.',
   },
   {
-    title: 'BJT Characteristics',
-    subject: 'Electronics',
-    tags: ['circuit', 'transistor'],
-    description: 'Study input and output characteristics of a bipolar junction transistor in CE configuration.',
-    size: 'small',
+    title: 'Explain Experiment 3',
+    description: 'Get a structured explanation of Experiment 3.',
+    query: 'Explain Experiment 3 from the uploaded manual. Include aim, theory, apparatus, procedure, observations, and precautions if available.',
   },
   {
-    title: 'SQL Lab Experiment 3',
-    subject: 'Computer Science',
-    tags: ['database', 'queries'],
-    description: 'Practice SQL joins, nested queries, and aggregate functions on sample databases.',
-    size: 'medium',
+    title: 'Summarize Aim and Apparatus',
+    description: 'List aims and required equipment from the manual.',
+    query: 'Summarize the aim and apparatus sections from the uploaded lab manual. Organize the answer experiment-wise if possible.',
   },
   {
-    title: 'OS Shell Programming',
-    subject: 'Computer Science',
-    tags: ['scripting', 'unix'],
-    description: 'Write shell scripts for process management, file operations, and system automation.',
-    size: 'medium',
+    title: 'Explain Procedure',
+    description: 'Get step-by-step procedures from the manual.',
+    query: 'Explain the lab procedures from the uploaded manual in clear step-by-step form. Organize experiment-wise if possible.',
   },
   {
-    title: 'Tensile Strength Test',
-    subject: 'Mechanical',
-    tags: ['materials', 'testing'],
-    description: 'Determine tensile strength and yield point of mild steel using UTM machine.',
-    size: 'small',
+    title: 'List Precautions',
+    description: 'Find safety and experimental precautions.',
+    query: 'List the precautions mentioned in the uploaded lab manual. Organize them experiment-wise if possible.',
+  },
+  {
+    title: 'Explain Theory',
+    description: 'Understand the theory behind the experiments.',
+    query: 'Explain the theory sections from the uploaded lab manual in simple student-friendly language. Include formulas only if present in the manual.',
+  },
+  {
+    title: 'Record Writing Points',
+    description: 'Prepare lab-record style points.',
+    query: 'Based on the uploaded manual, give lab record writing points including aim, apparatus, procedure, observations, result, and precautions wherever available.',
   },
 ];
 
-const tagStyles = {
-  circuit: 'tag-core',
-  measurements: 'tag-theory',
-  fluid: 'tag-theory',
-  transistor: 'tag-lab',
-  database: 'tag-core',
-  queries: 'tag-pyq',
-  scripting: 'tag-lab',
-  unix: 'tag-theory',
-  materials: 'tag-theory',
-  testing: 'tag-lab',
-};
+function SourcesUsed({ sources }) {
+  if (!sources?.length) return null;
+
+  return (
+    <div className="card-editorial p-6">
+      <h3 className="font-bold text-slate-800 mb-4">Sources Used</h3>
+      <div className="space-y-3">
+        {sources.map((source, index) => (
+          <div key={index} className="p-4 bg-slate-50 border border-slate-200 rounded-md">
+            <p className="text-xs font-semibold text-slate-500 mb-2">
+              Chunk {source.chunk_index ?? index + 1}
+            </p>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              {source.text_preview || source.preview || 'No preview available.'}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Topics() {
-  const navigate = useNavigate();
+  const [selectedTopic, setSelectedTopic] = useState(null);
+  const [loadingCard, setLoadingCard] = useState(null);
+  const [answer, setAnswer] = useState('');
+  const [sources, setSources] = useState([]);
+  const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const noManualAnswer = answer.toLowerCase().includes('no lab manual has been uploaded');
+  const filteredCards = topicCards.filter((card) =>
+    `${card.title} ${card.description}`.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
+
+  async function handleTopicClick(card) {
+    setSelectedTopic(card);
+    setLoadingCard(card.title);
+    setError('');
+    setAnswer('');
+    setSources([]);
+
+    try {
+      const data = await sendMessage(card.query, [], TOPIC_SYSTEM_OVERRIDE);
+      const generatedAnswer = data?.answer?.trim();
+
+      if (!generatedAnswer) {
+        throw new Error('SmartGuide returned an empty response.');
+      }
+
+      setAnswer(generatedAnswer);
+      setSources(Array.isArray(data.sources) ? data.sources : []);
+    } catch (err) {
+      setError(err.message || 'Failed to generate topic explanation.');
+    } finally {
+      setLoadingCard(null);
+    }
+  }
 
   return (
     <div className="min-h-screen py-10 lg:py-16">
       <div className="max-w-6xl mx-auto px-6 lg:px-10">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-10">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 mb-8">
           <div>
-            <span className="section-label block mb-2">Lab Manual</span>
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Lab Experiments</h1>
-            <p className="text-slate-500 mt-2 max-w-md">
-              Browse experiments from your lab manual. Click to get step-by-step procedure guidance and explanations.
+            <span className="section-label block mb-2">Manual-grounded topic explainer</span>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Experiment Explainer</h1>
+            <p className="text-slate-500 mt-2 max-w-2xl">
+              Use quick study cards to ask SmartGuide about the uploaded lab manual.
             </p>
           </div>
+          <span className="tag bg-blue-50 text-blue-600 self-start">Study shortcuts</span>
         </div>
 
-        {/* Search & Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-10">
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="Search experiments..."
-              className="input-editorial w-full"
-            />
-          </div>
-          <div className="flex gap-2">
-            {['All', 'Physics', 'Electronics', 'CS', 'Mechanical'].map((filter) => (
-              <button
-                key={filter}
-                className={`btn-editorial text-sm ${filter === 'All' ? 'btn-solid' : ''}`}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
+        <div className="p-4 bg-blue-50 border border-blue-100 rounded-md mb-8">
+          <p className="text-sm text-blue-700">
+            These cards use the uploaded manual through SmartGuide's RAG assistant. They are study shortcuts,
+            not automatic experiment extraction.
+          </p>
+        </div>
+
+        <div className="mb-8">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search study cards..."
+            className="input-editorial w-full"
+          />
         </div>
 
         <div className="divider mb-10" />
 
-        {/* Experiments Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 auto-rows-auto">
-          {experiments.map((experiment, i) => (
-            <div
-              key={i}
-              className={`card-editorial hover-lift ${
-                experiment.size === 'large' ? 'sm:col-span-2 lg:col-span-2' : ''
-              } ${experiment.size === 'medium' ? 'lg:row-span-1' : ''}`}
-            >
-              <div className="p-6">
-                {/* Subject */}
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                    {experiment.subject}
-                  </span>
-                  <div className="flex gap-1.5">
-                    {experiment.tags.map((tag) => (
-                      <span key={tag} className={`tag ${tagStyles[tag] || 'bg-slate-100 text-slate-500'}`}>
-                        {tag}
+        <div className="grid lg:grid-cols-5 gap-8">
+          <div className="lg:col-span-2">
+            {filteredCards.length === 0 ? (
+              <div className="card-editorial p-6 text-center">
+                <p className="text-sm text-slate-500">No matching study cards found.</p>
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-1 gap-4">
+                {filteredCards.map((card) => {
+                  const isLoading = loadingCard === card.title;
+                  const isAnyLoading = Boolean(loadingCard);
+
+                  return (
+                    <button
+                      key={card.title}
+                      type="button"
+                      onClick={() => handleTopicClick(card)}
+                      disabled={isAnyLoading}
+                      className={`card-editorial p-5 text-left hover-lift transition ${
+                        selectedTopic?.title === card.title ? 'border-blue-200 bg-blue-50/40' : ''
+                      } ${isAnyLoading && !isLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <h2 className="font-bold text-slate-800">{card.title}</h2>
+                        {isLoading && (
+                          <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-500 leading-relaxed mb-4">{card.description}</p>
+                      <span className="text-xs font-semibold text-blue-600">
+                        {isLoading ? 'Generating...' : 'Open with SmartGuide'}
                       </span>
-                    ))}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="lg:col-span-3 space-y-6">
+            {error && (
+              <div className="card-editorial p-5 bg-red-50 border-red-200">
+                <h3 className="font-semibold text-red-800 text-sm mb-1">Topic Error</h3>
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+            )}
+
+            {!selectedTopic && !loadingCard && (
+              <div className="card-editorial p-8 min-h-[360px] flex items-center justify-center text-center">
+                <div>
+                  <h2 className="font-bold text-slate-800 mb-2">Choose a study card</h2>
+                  <p className="text-sm text-slate-500 max-w-md">
+                    Pick a prompt card to generate a manual-grounded explanation with sources.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {loadingCard && (
+              <div className="card-editorial p-8 min-h-[360px] flex items-center justify-center text-center">
+                <div>
+                  <div className="w-10 h-10 mx-auto mb-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  <h2 className="font-bold text-slate-800 mb-2">Generating explanation</h2>
+                  <p className="text-sm text-slate-500">
+                    Retrieving manual context for {loadingCard}.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {answer && selectedTopic && !loadingCard && (
+              <div className="card-editorial p-6">
+                <div className="flex items-start justify-between gap-4 mb-5">
+                  <div>
+                    <h2 className="font-bold text-slate-800">
+                      SmartGuide Explanation: {selectedTopic.title}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-1">Generated through SmartGuide RAG chat</p>
                   </div>
+                  {noManualAnswer && (
+                    <Link to="/upload" className="btn-editorial text-sm flex-shrink-0">
+                      Upload Manual
+                    </Link>
+                  )}
                 </div>
 
-                {/* Title */}
-                <h3 className="text-lg font-bold text-slate-800 mb-2">{experiment.title}</h3>
-
-                {/* Description */}
-                <p className="text-sm text-slate-500 leading-relaxed mb-5">
-                  {experiment.description}
-                </p>
-
-                {/* Action */}
-                <button
-                  onClick={() => navigate('/not-implemented')}
-                  className="btn-editorial text-sm w-full"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                  </svg>
-                  Open Lab Assistant
-                </button>
+                <div className="prose prose-sm max-w-none prose-slate prose-headings:text-slate-800 prose-p:text-slate-600 prose-li:text-slate-600 prose-strong:text-slate-800">
+                  <ReactMarkdown>{answer}</ReactMarkdown>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            )}
 
-        {/* Info Footer */}
-        <div className="mt-12 p-6 bg-slate-50 border border-slate-200 rounded-md">
-          <div className="flex items-start gap-4">
-            <span className="text-2xl">🧪</span>
-            <div>
-              <h4 className="font-semibold text-slate-700 mb-1">Experiments from your lab manual</h4>
-              <p className="text-sm text-slate-500">
-                Once the conversational RAG backend is integrated, you can ask questions about 
-                apparatus, procedures, observations, and viva topics for each experiment.
-              </p>
-            </div>
+            <SourcesUsed sources={sources} />
           </div>
         </div>
       </div>

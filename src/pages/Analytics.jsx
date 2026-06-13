@@ -1,131 +1,213 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import { sendMessage } from '../services/api';
 
-const vivaQuestions = [
-  {
-    id: 1,
-    question: "What is Ohm's Law and how do you verify it experimentally?",
-    answer: "Ohm's Law states that the current through a conductor is directly proportional to the voltage across it, provided temperature remains constant (V = IR). To verify experimentally: set up a circuit with a resistor, ammeter (in series), voltmeter (in parallel), and variable power supply. Record multiple V-I readings, plot a graph, and confirm linear relationship.",
-    experiment: "Ohm's Law Verification",
-    subject: 'Physics',
-  },
-  {
-    id: 2,
-    question: "What precautions should be taken while measuring viscosity?",
-    answer: "Key precautions: (1) Ensure the liquid is at uniform temperature throughout, (2) Use spheres of known density and diameter, (3) Release the sphere gently without initial velocity, (4) Start timing only after sphere attains terminal velocity, (5) Repeat measurements for accuracy.",
-    experiment: 'Determination of Viscosity',
-    subject: 'Physics',
-  },
-  {
-    id: 3,
-    question: "Why is the emitter-base junction forward biased in CE configuration?",
-    answer: "The emitter-base junction is forward biased to reduce the barrier potential and allow charge carriers (electrons in NPN) to flow from emitter to base. This is essential for transistor action where these carriers are then swept into the collector by the reverse-biased collector-base junction.",
-    experiment: 'BJT Characteristics',
-    subject: 'Electronics',
-  },
-  {
-    id: 4,
-    question: "What is the difference between INNER JOIN and LEFT JOIN?",
-    answer: "INNER JOIN returns only the rows that have matching values in both tables. LEFT JOIN returns all rows from the left table and matched rows from the right table; unmatched rows show NULL values for right table columns.",
-    experiment: 'SQL Lab Experiment 3',
-    subject: 'Computer Science',
-  },
-  {
-    id: 5,
-    question: "What is the purpose of shebang (#!) in shell scripts?",
-    answer: "The shebang (#!) at the beginning of a shell script specifies the interpreter that should execute the script. For example, #!/bin/bash tells the system to use the Bash shell. Without it, the script would be executed by the default shell which may cause compatibility issues.",
-    experiment: 'OS Shell Programming',
-    subject: 'Computer Science',
-  },
+const VIVA_SYSTEM_OVERRIDE = `You are SmartGuide's viva preparation assistant.
+Generate viva-style questions and concise answers using ONLY the retrieved context from the uploaded lab manual.
+Do not invent experiments, apparatus, readings, formulas, or procedures that are not present in the context.
+If the manual context is insufficient, clearly say that the uploaded manual does not contain enough information.
+Format the response in Markdown.
+
+Output format:
+
+## Viva Questions
+
+For each question:
+
+### Q1. [Question]
+
+**Answer:** [Concise answer based on the manual]
+
+After the questions, add:
+
+## Revision Tips
+
+* 3 to 5 short tips based on the manual content.
+
+If sources are available, the frontend will display them separately.`;
+
+const questionTypes = [
+  { label: 'Mixed', value: 'mixed' },
+  { label: 'Basic', value: 'basic' },
+  { label: 'Conceptual', value: 'conceptual' },
+  { label: 'Procedure-based', value: 'procedure-based' },
+  { label: 'Troubleshooting', value: 'troubleshooting' },
 ];
 
-export default function Analytics() {
-  const [expandedId, setExpandedId] = useState(null);
+function buildVivaQuery(questionType) {
+  if (questionType === 'mixed') {
+    return 'Generate 10 viva questions and concise answers based only on the uploaded lab manual.';
+  }
 
-  const toggleExpand = (id) => {
-    setExpandedId(expandedId === id ? null : id);
-  };
+  return `Generate 10 ${questionType} viva questions and concise answers based only on the uploaded lab manual.`;
+}
+
+function SourcesUsed({ sources }) {
+  if (!sources?.length) return null;
+
+  return (
+    <div className="card-editorial p-6">
+      <h3 className="font-bold text-slate-800 mb-4">Sources Used</h3>
+      <div className="space-y-3">
+        {sources.map((source, index) => (
+          <div key={index} className="p-4 bg-slate-50 border border-slate-200 rounded-md">
+            <p className="text-xs font-semibold text-slate-500 mb-2">
+              Chunk {source.chunk_index ?? index + 1}
+            </p>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              {source.text_preview || source.preview || 'No preview available.'}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function Analytics() {
+  const [questionType, setQuestionType] = useState('mixed');
+  const [loading, setLoading] = useState(false);
+  const [answer, setAnswer] = useState('');
+  const [sources, setSources] = useState([]);
+  const [error, setError] = useState('');
+
+  const noManualAnswer = answer.toLowerCase().includes('no lab manual has been uploaded');
+
+  async function handleGenerate() {
+    setLoading(true);
+    setError('');
+
+    try {
+      const data = await sendMessage(
+        buildVivaQuery(questionType),
+        [],
+        VIVA_SYSTEM_OVERRIDE,
+      );
+
+      const generatedAnswer = data?.answer?.trim();
+      if (!generatedAnswer) {
+        throw new Error('SmartGuide returned an empty response.');
+      }
+
+      setAnswer(generatedAnswer);
+      setSources(Array.isArray(data.sources) ? data.sources : []);
+    } catch (err) {
+      setError(err.message || 'Failed to generate viva questions. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen py-10 lg:py-16">
-      <div className="max-w-6xl mx-auto px-6 lg:px-10">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-10">
+      <div className="max-w-5xl mx-auto px-6 lg:px-10">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 mb-10">
           <div>
             <span className="section-label block mb-2">Practical Exam Prep</span>
             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Viva Preparation</h1>
-            <p className="text-slate-500 mt-2 max-w-md">
-              Prepare for your practical exam viva with probable questions and answers 
-              from your lab experiments.
+            <p className="text-slate-500 mt-2 max-w-xl">
+              Generate viva-style questions and concise answers from the uploaded lab manual.
             </p>
           </div>
-          <span className="tag bg-amber-50 text-amber-600">Coming Soon</span>
+          <span className="tag bg-blue-50 text-blue-600 self-start">Manual-grounded</span>
         </div>
 
         <div className="divider mb-10" />
 
-        {/* Info Banner */}
-        <div className="mb-8 p-4 bg-blue-50 border border-blue-100 rounded-md">
-          <div className="flex items-center gap-3">
-            <span className="text-xl">🎓</span>
-            <p className="text-sm text-blue-700">
-              Auto-generated from lab manual — Full viva question bank will be available after RAG integration.
-            </p>
-          </div>
-        </div>
+        <div className="grid lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-1 space-y-6">
+            <div className="card-editorial p-6">
+              <h2 className="font-bold text-slate-800 mb-4">Question Focus</h2>
+              <div className="space-y-2 mb-6">
+                {questionTypes.map((type) => (
+                  <button
+                    key={type.value}
+                    type="button"
+                    onClick={() => setQuestionType(type.value)}
+                    disabled={loading}
+                    className={`w-full text-left px-3 py-2 text-sm rounded transition-colors ${
+                      questionType === type.value
+                        ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
+                    }`}
+                  >
+                    {type.label}
+                  </button>
+                ))}
+              </div>
 
-        {/* Questions Accordion */}
-        <div className="space-y-4">
-          {vivaQuestions.map((item) => (
-            <div key={item.id} className="card-editorial overflow-hidden">
               <button
-                onClick={() => toggleExpand(item.id)}
-                className="w-full p-6 text-left flex items-start gap-4 hover:bg-slate-50 transition-colors"
+                type="button"
+                onClick={handleGenerate}
+                disabled={loading}
+                className={`btn-editorial btn-solid w-full justify-center ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-500">
-                  {item.id}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="tag bg-slate-100 text-slate-600 text-xs">{item.subject}</span>
-                    <span className="text-xs text-slate-400">{item.experiment}</span>
-                  </div>
-                  <h3 className="font-semibold text-slate-800 leading-snug">
-                    {item.question}
-                  </h3>
-                </div>
-                <svg
-                  className={`w-5 h-5 text-slate-400 transition-transform flex-shrink-0 ${
-                    expandedId === item.id ? 'rotate-180' : ''
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                {loading ? 'Generating...' : 'Generate Viva Questions'}
               </button>
-              {expandedId === item.id && (
-                <div className="px-6 pb-6 pt-2 border-t border-slate-100">
-                  <div className="ml-12 p-4 bg-slate-50 rounded-md">
-                    <p className="text-sm text-slate-600 leading-relaxed">{item.answer}</p>
-                  </div>
-                </div>
-              )}
             </div>
-          ))}
-        </div>
 
-        {/* Footer Info */}
-        <div className="mt-10 p-6 bg-slate-50 border border-slate-200 rounded-md">
-          <div className="flex items-start gap-4">
-            <span className="text-2xl">❓</span>
-            <div>
-              <h4 className="font-semibold text-slate-700 mb-1">Viva Question Bank — Under Development</h4>
-              <p className="text-sm text-slate-500">
-                Questions shown above are sample placeholders. The full question bank will be 
-                auto-generated from your lab manual after the conversational AI backend is integrated.
+            <div className="card-editorial p-5 bg-blue-50 border-blue-100">
+              <h3 className="font-semibold text-blue-800 text-sm mb-2">How it works</h3>
+              <p className="text-xs text-blue-700 leading-relaxed">
+                SmartGuide asks the existing RAG chat pipeline to retrieve relevant manual chunks,
+                then Gemini formats viva questions from that retrieved context.
               </p>
             </div>
+          </div>
+
+          <div className="lg:col-span-2 space-y-6">
+            {error && (
+              <div className="card-editorial p-5 bg-red-50 border-red-200">
+                <h3 className="font-semibold text-red-800 text-sm mb-1">Generation Error</h3>
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+            )}
+
+            {!answer && !loading && (
+              <div className="card-editorial p-8 min-h-[300px] flex items-center justify-center text-center">
+                <div>
+                  <h2 className="font-bold text-slate-800 mb-2">Ready to generate viva practice</h2>
+                  <p className="text-sm text-slate-500 max-w-md">
+                    Upload a lab manual first, then generate questions grounded in the indexed manual content.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {loading && (
+              <div className="card-editorial p-8 min-h-[300px] flex items-center justify-center text-center">
+                <div>
+                  <div className="w-10 h-10 mx-auto mb-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  <h2 className="font-bold text-slate-800 mb-2">Generating viva questions</h2>
+                  <p className="text-sm text-slate-500">
+                    Retrieving manual context and preparing a Markdown study set.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {answer && (
+              <div className="card-editorial p-6">
+                <div className="flex items-start justify-between gap-4 mb-5">
+                  <div>
+                    <h2 className="font-bold text-slate-800">Generated Viva Set</h2>
+                    <p className="text-xs text-slate-400 mt-1">Generated through SmartGuide RAG chat</p>
+                  </div>
+                  {noManualAnswer && (
+                    <Link to="/upload" className="btn-editorial text-sm flex-shrink-0">
+                      Upload Manual
+                    </Link>
+                  )}
+                </div>
+
+                <div className="prose prose-sm max-w-none prose-slate prose-headings:text-slate-800 prose-p:text-slate-600 prose-li:text-slate-600 prose-strong:text-slate-800">
+                  <ReactMarkdown>{answer}</ReactMarkdown>
+                </div>
+              </div>
+            )}
+
+            <SourcesUsed sources={sources} />
           </div>
         </div>
       </div>

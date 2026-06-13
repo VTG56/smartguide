@@ -1,90 +1,88 @@
 # SmartGuide Backend
 
-FastAPI backend for the SmartGuide lab manual assistant. It accepts PDF lab manuals, extracts and cleans text, creates overlapping chunks, embeds the chunks with Gemini, stores them in ChromaDB, and serves a RAG chat endpoint.
+FastAPI backend for SmartGuide. It accepts PDF lab manuals, extracts and cleans text, creates overlapping chunks, embeds them with Gemini, stores them in ChromaDB, and serves a manual-grounded `/chat` endpoint.
 
-## Current Status
+## Tech Stack
 
-The backend has completed the main prototype RAG path:
+- FastAPI
+- PyPDF2
+- Google GenAI SDK
+- ChromaDB persistent vector store
+- python-dotenv
+- python-multipart
 
-- Upload PDF.
-- Extract text.
-- Clean text.
-- Create overlapping chunks.
-- Generate Gemini embeddings.
-- Store vectors in persistent ChromaDB.
-- Retrieve similar chunks for a user query.
-- Generate answers with Gemini using retrieved manual context.
+## Environment Variables
 
-It still needs stronger document management, automated tests, page-aware citations, and production hardening.
+Create `backend/.env`:
 
-## Project Structure
-
-```text
-backend/
-├── app/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── routes/
-│   │   ├── __init__.py
-│   │   └── upload.py
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── embedding_service.py
-│   │   ├── pdf_processor.py
-│   │   └── vector_store.py
-│   └── utils/
-│       ├── __init__.py
-│       └── text_cleaner.py
-├── requirements.txt
-├── README.md
-└── TESTING.md
+```env
+GEMINI_API_KEY=your_key_here
+CHUNK_SIZE=500
+CHUNK_OVERLAP_WORDS=100
 ```
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `GEMINI_API_KEY` | Yes | None | Gemini embeddings and chat generation |
+| `CHUNK_SIZE` | No | `500` | Target words per chunk |
+| `CHUNK_OVERLAP_WORDS` | No | `100` | Word overlap between adjacent chunks |
+
+The backend fails fast on startup if `GEMINI_API_KEY` is missing.
 
 ## Setup
 
 ```bash
 cd backend
+python -m venv venv
+```
+
+Windows activation:
+
+```powershell
+.\venv\Scripts\activate
+```
+
+Unix/macOS activation:
+
+```bash
+source venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
 pip install -r requirements.txt
 ```
 
-Create a `.env` file in `backend/`:
-
-```env
-GEMINI_API_KEY=your_api_key_here
-```
-
-Optional chunking settings:
-
-```env
-CHUNK_SIZE=500
-CHUNK_OVERLAP_WORDS=100
-```
-
-## Running
+Run the backend:
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-Custom host and port:
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Server:
+Backend URL:
 
 ```text
 http://localhost:8000
 ```
 
-Interactive docs:
+API docs:
 
 ```text
 http://localhost:8000/docs
 ```
 
-## API Endpoints
+## Endpoint List
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | Health check |
+| `POST` | `/upload-lab-manual` | Upload, process, embed, and index a PDF |
+| `GET` | `/chunks` | Inspect current in-memory chunks |
+| `POST` | `/chat` | RAG chat over the uploaded manual |
+| `DELETE` | `/reset` | Clear ChromaDB and in-memory chunks |
+
+## Endpoint Examples
 
 ### `GET /`
 
@@ -102,17 +100,17 @@ Example response:
 
 Uploads a PDF manual and processes it.
 
-Processing steps:
+Processing behavior:
 
-1. Validate the file extension is `.pdf`.
-2. Save the upload temporarily.
-3. Extract text with PyPDF2.
-4. Clean extracted text.
-5. Create overlapping chunks.
-6. Store chunks in memory.
-7. Generate embeddings with Gemini.
-8. Upsert vectors into ChromaDB.
-9. Delete the temporary uploaded file.
+1. Validates the filename has a `.pdf` extension.
+2. Clears existing ChromaDB vectors and in-memory chunks.
+3. Saves the upload temporarily.
+4. Extracts text with PyPDF2.
+5. Cleans text.
+6. Creates overlapping word chunks.
+7. Generates Gemini embeddings with `gemini-embedding-001`.
+8. Upserts vectors into ChromaDB.
+9. Deletes the temporary uploaded file.
 
 Example response:
 
@@ -120,7 +118,7 @@ Example response:
 {
   "status": "success",
   "pages": 25,
-  "text_preview": "Experiment 1: Verification of Ohm's Law...",
+  "text_preview": "Experiment 1: ...",
   "total_characters": 45328,
   "chunks_created": 18,
   "embeddings_status": "success",
@@ -128,11 +126,9 @@ Example response:
 }
 ```
 
-Known limitation: new uploads replace the in-memory chunk list but do not automatically clear old ChromaDB vectors. Use `DELETE /reset` before uploading a replacement manual until multi-document indexing is implemented.
-
 ### `GET /chunks`
 
-Returns the chunks currently held in memory.
+Returns the current in-memory chunk cache.
 
 Example response shape:
 
@@ -140,40 +136,54 @@ Example response shape:
 {
   "status": "success",
   "total_chunks": 18,
-  "chunks": []
-}
-```
-
-### `POST /chat`
-
-Runs the conversational RAG flow.
-
-Request body:
-
-```json
-{
-  "query": "What apparatus is needed for Ohm's law?",
-  "history": [
+  "chunks": [
     {
-      "role": "user",
-      "content": "What experiments are in this manual?"
-    },
-    {
-      "role": "assistant",
-      "content": "The manual includes..."
+      "id": "chunk-id",
+      "text": "chunk text",
+      "length": 1200,
+      "chunk_index": 0,
+      "start_word": 0,
+      "end_word": 500,
+      "prev_chunk_id": null,
+      "next_chunk_id": "next-id"
     }
   ]
 }
 ```
 
-Processing steps:
+### `POST /chat`
 
-1. Check that the ChromaDB collection has indexed chunks.
-2. Embed the user query with Gemini.
-3. Retrieve the top 5 similar chunks from ChromaDB.
-4. Build a context-only system instruction.
-5. Send the prompt and conversation history to Gemini.
-6. Return the answer and source chunk previews.
+Runs the RAG flow over the currently indexed manual.
+
+Request body:
+
+```json
+{
+  "query": "What apparatus is needed?",
+  "history": [
+    {
+      "role": "user",
+      "content": "What experiments are covered?"
+    },
+    {
+      "role": "assistant",
+      "content": "The manual covers..."
+    }
+  ]
+}
+```
+
+Specialized frontend views may pass `system_override`:
+
+```json
+{
+  "query": "Generate viva questions from this manual.",
+  "history": [],
+  "system_override": "You are SmartGuide's viva preparation assistant..."
+}
+```
+
+`system_override` changes the hidden instruction used for that request, but it does not create a separate endpoint. Viva Prep, Error Solver, and Experiment Explainer still use the same retrieval and Gemini generation flow as normal chat.
 
 Example response:
 
@@ -183,15 +193,17 @@ Example response:
   "sources": [
     {
       "chunk_index": 3,
-      "text_preview": "Apparatus required: resistor, ammeter, voltmeter..."
+      "text_preview": "Apparatus required: ..."
     }
   ]
 }
 ```
 
+If no manual is indexed, `/chat` returns a no-manual message with an empty `sources` array.
+
 ### `DELETE /reset`
 
-Clears the ChromaDB collection and the in-memory chunks.
+Clears ChromaDB and in-memory chunks.
 
 Example response:
 
@@ -202,77 +214,38 @@ Example response:
 }
 ```
 
-## Completed
+## Vector Isolation
 
-- FastAPI app initialization.
-- CORS setup for frontend access.
-- PDF upload validation.
-- PDF text extraction.
-- Text cleaning utility.
-- Configurable chunk size and overlap.
-- Chunk metadata for boundaries and neighbor links.
-- Temporary upload cleanup.
-- In-memory chunk inspection endpoint.
-- Gemini embedding service.
-- Gemini query embedding service.
-- ChromaDB persistent collection.
-- Similarity search.
-- Gemini-powered chat generation.
-- Source previews in chat responses.
-- Data reset endpoint.
-- Swagger/OpenAPI docs through FastAPI.
+SmartGuide currently works in single-manual mode. Uploading a new PDF clears the previous ChromaDB collection and in-memory chunks before indexing the replacement manual. This is intentional to reduce cross-manual hallucination.
 
-## Remaining
+`clear_collection()` is written to be safe when the collection exists or does not exist, so reset and first-run upload paths can recreate the collection cleanly.
 
-- Add automated test suite.
-- Clear or version ChromaDB data correctly on new uploads.
-- Add multi-document support.
-- Store document metadata such as filename, upload time, subject, and page ranges.
-- Track page numbers for citations.
-- Improve startup checks for missing `GEMINI_API_KEY`.
-- Add request size limits and safer upload handling.
-- Add structured logging.
-- Add authentication and per-user document isolation.
-- Add rate limiting.
-- Add deployment configuration.
-- Add support for DOCX, PPT, and TXT if those formats remain in scope.
+## Chunking
 
-## Dependencies
+Chunking is word-based and configured by:
 
-- `fastapi`
-- `uvicorn`
-- `pypdf2`
-- `python-multipart`
-- `requests`
-- `google-genai`
-- `chromadb`
-- `python-dotenv`
+- `CHUNK_SIZE`
+- `CHUNK_OVERLAP_WORDS`
 
-## Quick Test
+Each chunk includes:
 
-Health check:
+- `id`
+- `text`
+- `length`
+- `chunk_index`
+- `start_word`
+- `end_word`
+- `prev_chunk_id`
+- `next_chunk_id`
 
-```bash
-curl http://localhost:8000/
-```
+Chroma metadata stores chunk boundary fields, but page-number metadata is not currently stored.
 
-Upload PDF:
+## Limitations
 
-```bash
-curl -X POST "http://localhost:8000/upload-lab-manual" \
-  -F "file=@/path/to/lab_manual.pdf"
-```
-
-Chat:
-
-```bash
-curl -X POST "http://localhost:8000/chat" \
-  -H "Content-Type: application/json" \
-  -d "{\"query\":\"What experiments are covered?\",\"history\":[]}"
-```
-
-Reset:
-
-```bash
-curl -X DELETE "http://localhost:8000/reset"
-```
+- PDF upload only.
+- Single-manual indexing only.
+- No page-number citations.
+- No multi-manual filtering or document management.
+- Minimal document metadata.
+- Basic error handling.
+- No authentication, rate limiting, or production deployment setup.

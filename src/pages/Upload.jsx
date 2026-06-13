@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { API_BASE_URL } from '../services/api';
 
 const supportedFormats = [
   { ext: 'PDF', icon: '📄', status: 'active' },
@@ -43,7 +44,7 @@ export default function Upload() {
       const formData = new FormData();
       formData.append('file', selectedFile);
 
-      const res = await fetch('http://localhost:8000/upload-lab-manual', {
+      const res = await fetch(`${API_BASE_URL}/upload-lab-manual`, {
         method: 'POST',
         body: formData,
       });
@@ -63,6 +64,14 @@ export default function Upload() {
       setUploading(false);
     }
   };
+
+  const embeddingStatus = String(response?.embeddings_status || 'unknown');
+  const embeddingStatusLower = embeddingStatus.toLowerCase();
+  const embeddingStatusClass = embeddingStatusLower.includes('success')
+    ? 'bg-green-50 text-green-700 border-green-200'
+    : embeddingStatusLower.includes('failed')
+      ? 'bg-red-50 text-red-700 border-red-200'
+      : 'bg-amber-50 text-amber-700 border-amber-200';
 
   return (
     <div className="min-h-screen py-10 lg:py-16">
@@ -178,6 +187,13 @@ export default function Upload() {
                   </div>
                 </div>
 
+                <div className={`p-4 rounded-md border mb-4 ${embeddingStatusClass}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide">Embedding Status</p>
+                    <p className="text-sm font-semibold">{embeddingStatus}</p>
+                  </div>
+                </div>
+
                 <div className="bg-white p-4 rounded-md border border-green-100 mb-4">
                   <p className="text-xs text-slate-500 mb-2 font-semibold">Text Preview:</p>
                   <div className="bg-slate-50 p-3 rounded text-xs text-slate-700 max-h-40 overflow-y-auto font-mono leading-relaxed whitespace-pre-wrap">
@@ -223,7 +239,7 @@ export default function Upload() {
                 <div>
                   <h4 className="font-semibold text-blue-800 text-sm mb-1">Backend Connected</h4>
                   <p className="text-xs text-blue-600 leading-relaxed">
-                    Your PDF will be sent to the FastAPI backend at localhost:8000 for processing.
+                    Your PDF will be sent to the configured FastAPI backend for processing.
                   </p>
                 </div>
               </div>

@@ -53,9 +53,9 @@ const pageContent = {
     icon: '🚧',
     iconBg: 'bg-amber-50',
     iconColor: 'text-amber-500',
-    label: 'Development Status',
-    title: 'Module Under Development',
-    description: 'This feature will be implemented in the upcoming development phase.',
+    label: 'SmartGuide Module',
+    title: 'Workflow Area',
+    description: 'Use the main upload and chat workflow for live manual-grounded assistance.',
     examples: [],
   },
 };
@@ -100,7 +100,7 @@ export default function NotImplemented() {
 
         <div className="p-4 bg-amber-50 border border-amber-100 rounded-md mb-8">
           <p className="text-xs text-amber-700 text-center">
-            Under Development — Coming in Phase 2
+            Upload a manual and use Chat for live RAG answers.
           </p>
         </div>
 
