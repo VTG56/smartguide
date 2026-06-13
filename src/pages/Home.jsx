@@ -50,7 +50,7 @@ export default function Home() {
                 <span className="text-slate-400">Your Lab Assistant</span>
               </h1>
               <p className="text-lg text-slate-500 leading-relaxed max-w-lg">
-                Ask questions about experiments, procedures, readings, and viva topics. 
+                Ask questions about experiments, procedures, readings, and viva topics.
                 Get step-by-step guidance for your practical lab sessions.
               </p>
             </div>
@@ -62,10 +62,9 @@ export default function Home() {
                   <span className="tag tag-core">Current Phase</span>
                   <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                 </div>
-                <h3 className="font-bold text-slate-800 mb-2">Phase 1 – UI Scaffold</h3>
+                <h3 className="font-bold text-slate-800 mb-2">Systems Active</h3>
                 <p className="text-sm text-slate-500 leading-relaxed">
-                  Conversational engine integration in progress. Frontend prototype ready 
-                  for RAG pipeline connection.
+                  Conversational engine is online. RAG pipeline is actively connected and ready for your lab manuals
                 </p>
               </div>
               <div className="card-editorial p-6 bg-slate-50">
@@ -134,7 +133,7 @@ export default function Home() {
               ))}
             </div>
             <p className="text-center text-sm text-slate-500 mt-6">
-              Dummy agent flow — Conversational RAG backend will be integrated in Phase 2.
+              Live Agent Flow — Powered by Gemini 2.5 Flash and ChromaDB
             </p>
           </div>
         </div>

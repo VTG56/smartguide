@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import uuid
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -47,6 +48,13 @@ DEFAULT_CHUNK_OVERLAP_WORDS = 100
 chunks_storage = []
 
 
+@app.on_event("startup")
+async def check_env_vars():
+    """Fail-fast check to ensure API key is present before the app starts handling requests."""
+    if not os.getenv("GEMINI_API_KEY"):
+        raise RuntimeError("🚨 GEMINI_API_KEY is missing from the environment variables! Shutting down.")
+
+
 def _safe_int_from_env(env_key, default_value):
     """Read integer env var with fallback to default value."""
     raw_value = os.getenv(env_key)
@@ -86,14 +94,7 @@ def sanitize_text(text):
     """
     Remove problematic Unicode characters that can't be encoded in UTF-8.
     Handles surrogate characters and other encoding issues.
-    
-    Args:
-        text: Text to sanitize
-        
-    Returns:
-        Sanitized text safe for UTF-8 encoding
     """
-    # Remove surrogate characters and other problematic Unicode
     sanitized = text.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
     return sanitized
 
@@ -102,14 +103,6 @@ def create_chunks(text, chunk_size=DEFAULT_CHUNK_SIZE, overlap_words=DEFAULT_CHU
     """
     Split text into overlapping chunks.
     Preserves context by keeping overlap_words shared words between chunks.
-    
-    Args:
-        text: Full text to chunk
-        chunk_size: Target number of words per chunk
-        overlap_words: Number of words to overlap between adjacent chunks
-        
-    Returns:
-        List of chunk dictionaries with id, text, length, and boundary metadata
     """
     if chunk_size <= 0:
         chunk_size = DEFAULT_CHUNK_SIZE
@@ -174,6 +167,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     query: str
     history: list[ChatMessage] = []
+    system_override: Optional[str] = None
 
 
 # ─────────────────────────────────────────────
@@ -191,16 +185,18 @@ async def upload_lab_manual(file: UploadFile = File(...)):
     """
     Upload a laboratory manual PDF and extract text content.
     Creates text chunks, generates embeddings, and stores them in ChromaDB.
-    
-    Args:
-        file: PDF file to upload
-        
-    Returns:
-        JSON response with extracted text info, chunk count, and embedding status
     """
     # Validate file extension
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
+
+    # ── FIX: Clear existing vectors and chunks to prevent hallucinations across manuals ──
+    global chunks_storage
+    try:
+        clear_collection()
+        chunks_storage = []
+    except Exception as e:
+        print(f"Warning: Failed to clear previous collection: {e}")
 
     # Save file temporarily
     file_path = os.path.join(UPLOAD_DIR, file.filename)
@@ -222,8 +218,7 @@ async def upload_lab_manual(file: UploadFile = File(...)):
             overlap_words=CHUNK_OVERLAP_WORDS,
         )
         
-        # Clear previous chunks and store new ones
-        global chunks_storage
+        # Store new chunks
         chunks_storage = chunks
 
         # ── Phase 3 & 4: Embed chunks and upsert into ChromaDB ──
@@ -262,9 +257,6 @@ async def upload_lab_manual(file: UploadFile = File(...)):
 async def get_chunks():
     """
     Retrieve all stored text chunks.
-    
-    Returns:
-        JSON response with list of all chunks
     """
     return JSONResponse({
         "status": "success",
@@ -277,12 +269,6 @@ async def get_chunks():
 async def chat(request: ChatRequest):
     """
     Conversational RAG chat endpoint.
-    
-    1. Embeds the user query via Gemini
-    2. Retrieves top 5 similar chunks from ChromaDB
-    3. Builds a system prompt with the retrieved context
-    4. Sends conversation history + system prompt to Gemini Flash
-    5. Returns the assistant answer with source citations
     """
     # Guard: Check if any documents are indexed
     if collection_count() == 0:
@@ -315,12 +301,16 @@ async def chat(request: ChatRequest):
 
         context_text = "\n\n---\n\n".join(context_parts) if context_parts else "No relevant context found."
 
-        system_prompt = (
-            "You are an intelligent assistant for lab manuals. "
-            "Use ONLY the following context to answer the user's question. "
-            "If the answer is not in the context, say \"I don't have information about that in the manual.\"\n\n"
-            f"Context:\n{context_text}"
-        )
+        # ── FIX: Implement Hidden System Overrides for Viva/Solver Pages ──
+        if request.system_override:
+            system_prompt = request.system_override + f"\n\nContext:\n{context_text}"
+        else:
+            system_prompt = (
+                "You are an intelligent assistant for lab manuals. "
+                "Use ONLY the following context to answer the user's question. "
+                "If the answer is not in the context, say \"I don't have information about that in the manual.\"\n\n"
+                f"Context:\n{context_text}"
+            )
 
         # Step 4: Build conversation for Gemini
         gemini_contents = []

@@ -2,11 +2,13 @@
 
 SmartGuide is a lab manual assistant built with a React frontend and a FastAPI backend. It lets a user upload a lab manual PDF, extracts and chunks the manual text, stores semantic embeddings in ChromaDB, and answers questions using a Retrieval-Augmented Generation (RAG) flow with Gemini.
 
+...
 ## Current Status
 
-The project is past the initial UI scaffold and basic upload stage. PDF upload, backend processing, chunking, embeddings, vector storage, and a working chat endpoint are implemented. Some frontend pages are still prototypes or use static placeholder data.
+The project has advanced past the initial UI scaffold and features a fully connected RAG pipeline. PDF upload, text chunking, embedding generation, and vector storage are fully functional. The system automatically manages vector isolation (auto-wiping previous vectors on new uploads) and includes a fail-fast startup sequence. Some specialized frontend pages are currently undergoing integration with the live chat API.
 
 ## Tech Stack
+
 
 ### Frontend
 
@@ -24,26 +26,29 @@ The project is past the initial UI scaffold and basic upload stage. PDF upload, 
 - ChromaDB persistent vector store
 - python-dotenv for local environment configuration
 
+
 ## Completed Features
 
 ### Frontend
 
-- Dashboard layout with sidebar navigation.
+- Dashboard layout with sidebar navigation, accurately reflecting the live system state.
 - Upload page for selecting and uploading PDF lab manuals.
 - Frontend PDF validation before upload.
-- Upload success state showing extracted page count, character count, and text preview.
+- Upload success state showing extracted page count, character count, text preview, chunks created, and vectors stored.
+- Direct routing from successful upload to the Chat interface.
 - Chat page connected to the backend `/chat` API.
 - Chat history passed to the backend with each request.
 - Markdown rendering for assistant answers.
 - Loading indicator, error toast, clear-chat action, and quick prompt chips.
 - Source display for retrieved chunks returned by the backend.
-- Basic pages for dashboard, lab experiments, viva preparation, troubleshooting, reports, and settings navigation.
 
 ### Backend
 
 - FastAPI application with CORS enabled for frontend integration.
+- Fail-fast startup configuration that halts execution if `GEMINI_API_KEY` is missing.
 - Health check endpoint: `GET /`.
 - PDF upload endpoint: `POST /upload-lab-manual`.
+- Automatic clearing of ChromaDB and in-memory chunks upon new manual upload to prevent cross-document hallucinations.
 - Text extraction from uploaded PDFs.
 - Text cleanup for whitespace, broken hyphenated lines, and repeated newlines.
 - Configurable word chunking with overlap.
@@ -59,9 +64,10 @@ The project is past the initial UI scaffold and basic upload stage. PDF upload, 
 - Persistent ChromaDB vector storage in `./chroma_db`.
 - Semantic search over uploaded chunks.
 - RAG chat endpoint: `POST /chat`.
+- Support for `system_override` parameters in the `/chat` endpoint to facilitate hidden prompts for specialized UI views.
 - Gemini chat response generation with `gemini-2.5-flash`.
 - Source previews returned with chat responses.
-- Reset endpoint: `DELETE /reset`, which clears ChromaDB and in-memory chunks.
+- Reset endpoint: `DELETE /reset`, which manually clears ChromaDB and in-memory chunks.
 - Temporary uploaded PDF cleanup after processing.
 - Basic error handling for invalid files, failed processing, empty chat queries, and reset failures.
 

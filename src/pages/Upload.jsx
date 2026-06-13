@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 const supportedFormats = [
   { ext: 'PDF', icon: '📄', status: 'active' },
@@ -15,16 +16,15 @@ export default function Upload() {
 
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
-    
+
     if (!file) return;
-    
-    // Check if file is PDF
+
     if (file.type !== 'application/pdf') {
       setError('Please select a PDF file only');
       setSelectedFile(null);
       return;
     }
-    
+
     setSelectedFile(file);
     setError(null);
     setResponse(null);
@@ -55,9 +55,8 @@ export default function Upload() {
       const data = await res.json();
       setResponse(data);
 
-      // Signal to ChatPage that a manual has been uploaded
       localStorage.setItem('smartguide_uploaded', 'true');
-      
+
     } catch (err) {
       setError(err.message || 'Failed to upload file. Please try again.');
     } finally {
@@ -68,12 +67,11 @@ export default function Upload() {
   return (
     <div className="min-h-screen py-10 lg:py-16">
       <div className="max-w-4xl mx-auto px-6 lg:px-10">
-        {/* Header */}
         <div className="mb-10">
           <span className="section-label block mb-2">Lab Manual Upload</span>
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Upload Lab Manual</h1>
           <p className="text-slate-500 mt-2 max-w-lg">
-            Upload your lab manual PDFs to enable SmartGuide to answer questions about 
+            Upload your lab manual PDFs to enable SmartGuide to answer questions about
             experiments, procedures, apparatus, and viva topics.
           </p>
         </div>
@@ -81,9 +79,7 @@ export default function Upload() {
         <div className="divider mb-10" />
 
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Main Upload Area */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Drop Zone */}
             <div className="card-editorial border-2 border-dashed border-slate-300 hover:border-slate-400 transition-colors">
               <div className="p-12 text-center">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
@@ -95,7 +91,7 @@ export default function Upload() {
                 <p className="text-sm text-slate-400 mb-6">
                   Only PDF files are currently supported
                 </p>
-                
+
                 <input
                   type="file"
                   accept=".pdf,application/pdf"
@@ -103,7 +99,7 @@ export default function Upload() {
                   className="hidden"
                   id="file-input"
                 />
-                
+
                 <label htmlFor="file-input" className="btn-editorial btn-solid inline-flex items-center gap-2 cursor-pointer">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
@@ -124,22 +120,19 @@ export default function Upload() {
               </div>
             </div>
 
-            {/* Upload Button */}
             {selectedFile && (
               <div className="text-center">
                 <button
                   onClick={handleUpload}
                   disabled={uploading}
-                  className={`btn-editorial btn-solid px-8 py-3 text-base ${
-                    uploading ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
+                  className={`btn-editorial btn-solid px-8 py-3 text-base ${uploading ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                 >
                   {uploading ? 'Uploading...' : 'Upload to Backend'}
                 </button>
               </div>
             )}
 
-            {/* Error Message */}
             {error && (
               <div className="card-editorial p-6 bg-red-50 border-red-200">
                 <div className="flex items-start gap-3">
@@ -152,7 +145,6 @@ export default function Upload() {
               </div>
             )}
 
-            {/* Success Response */}
             {response && response.status === 'success' && (
               <div className="card-editorial p-6 bg-green-50 border-green-200">
                 <div className="flex items-start gap-3 mb-4">
@@ -163,30 +155,49 @@ export default function Upload() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                   <div className="bg-white p-4 rounded-md border border-green-100">
                     <p className="text-xs text-slate-500 mb-1">Total Pages</p>
                     <p className="text-2xl font-bold text-slate-800">{response.pages}</p>
                   </div>
                   <div className="bg-white p-4 rounded-md border border-green-100">
-                    <p className="text-xs text-slate-500 mb-1">Total Characters</p>
-                    <p className="text-2xl font-bold text-slate-800">{response.total_characters.toLocaleString()}</p>
+                    <p className="text-xs text-slate-500 mb-1">Total Chars</p>
+                    <p className="text-2xl font-bold text-slate-800">
+                      {response.total_characters >= 1000
+                        ? (response.total_characters / 1000).toFixed(1) + 'k'
+                        : response.total_characters}
+                    </p>
+                  </div>
+                  <div className="bg-white p-4 rounded-md border border-green-100">
+                    <p className="text-xs text-slate-500 mb-1">Chunks</p>
+                    <p className="text-2xl font-bold text-slate-800">{response.chunks_created}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-md border border-green-100">
+                    <p className="text-xs text-slate-500 mb-1">Vectors</p>
+                    <p className="text-2xl font-bold text-slate-800">{response.vectors_stored}</p>
                   </div>
                 </div>
 
-                <div className="bg-white p-4 rounded-md border border-green-100">
+                <div className="bg-white p-4 rounded-md border border-green-100 mb-4">
                   <p className="text-xs text-slate-500 mb-2 font-semibold">Text Preview:</p>
-                  <div className="bg-slate-50 p-3 rounded text-xs text-slate-700 max-h-64 overflow-y-auto font-mono leading-relaxed whitespace-pre-wrap">
+                  <div className="bg-slate-50 p-3 rounded text-xs text-slate-700 max-h-40 overflow-y-auto font-mono leading-relaxed whitespace-pre-wrap">
                     {response.text_preview}
                   </div>
+                </div>
+
+                <div className="text-right">
+                  <Link to="/chat" className="btn-editorial btn-solid px-6 py-2 inline-flex items-center gap-2">
+                    Start Chatting
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </Link>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Sidebar Info */}
           <div className="space-y-6">
-            {/* Supported Formats */}
             <div className="card-editorial p-6">
               <h3 className="font-bold text-slate-800 mb-4">Supported Formats</h3>
               <div className="space-y-3">
@@ -206,7 +217,6 @@ export default function Upload() {
               </div>
             </div>
 
-            {/* Info Box */}
             <div className="card-editorial p-6 bg-blue-50 border-blue-100">
               <div className="flex items-start gap-3">
                 <span className="text-xl">🧪</span>
@@ -219,11 +229,10 @@ export default function Upload() {
               </div>
             </div>
 
-            {/* Processing Steps */}
             <div className="card-editorial p-6">
               <h3 className="font-bold text-slate-800 mb-4">Processing Pipeline</h3>
               <div className="space-y-3">
-                {['Upload Manual', 'Parse Experiments', 'Extract Procedures', 'Generate Embeddings', 'Enable Q&A'].map((step, i) => (
+                {['Upload Manual', 'Parse Text', 'Create Chunks', 'Generate Embeddings', 'Sync Vector DB'].map((step, i) => (
                   <div key={step} className="flex items-center gap-3">
                     <span className="section-number">{String(i + 1).padStart(2, '0')}</span>
                     <span className="text-sm text-slate-600">{step}</span>
